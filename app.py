@@ -1,76 +1,41 @@
-import os
-import shutil
-import streamlit as st
-from utils.embedder import embed_query
 from utils.retriever import retrieve_relevant_chunks
+from utils.embedder import embed_query, embed_and_add_to_index
 from utils.generator import generate_answer
-from utils.build_index_live import embed_and_add_to_index
+import os
 
-st.set_page_config(page_title="Multimodal RAG", layout="wide")
-st.title("📚 Multimodal RAG System")
+# User uploads files and clicks "Generate Embeddings"
+uploaded_files = st.file_uploader("📄 Upload PDF, DOCX or Images", accept_multiple_files=True)
 
-# Paths
-DOCS_DIR = "data/docs"
-IMAGES_DIR = "data/images"
-os.makedirs(DOCS_DIR, exist_ok=True)
-os.makedirs(IMAGES_DIR, exist_ok=True)
-
-# === File Upload Section ===
-st.subheader("📂 Upload New Document or Image")
-
-uploaded_files = st.file_uploader(
-    "Upload a .pdf, .docx, .txt or image file (.jpg/.png)", 
-    type=["pdf", "docx", "txt", "jpg", "jpeg", "png"], 
-    accept_multiple_files=True
-)
-
-if st.button("📌 Generate Embeddings from Uploaded Files"):
-    if not uploaded_files:
-        st.warning("Please upload at least one file.")
-    else:
+if st.button("⚙️ Generate Embeddings"):
+    if uploaded_files:
         for file in uploaded_files:
-            filename = file.name
-            file_path = os.path.join(DOCS_DIR if filename.endswith((".txt", ".pdf", ".docx")) else IMAGES_DIR, filename)
+            file_path = os.path.join("data/docs", file.name)
             with open(file_path, "wb") as f:
                 f.write(file.read())
-            embed_and_add_to_index(file_path)
-        st.success("✅ Embedding(s) generated and added to index!")
 
-st.divider()
-
-# === Query Section ===
-st.subheader("🔍 Ask a Question")
-
-query = st.text_input("Enter your question here:")
-model_choice = st.selectbox("Choose model", ["gpt-3.5-turbo", "gpt-4"])
-
-if st.button("🧠 Search & Answer"):
-    if not query:
-        st.warning("Enter a question first.")
+        embed_and_add_to_index("data/docs")
+        st.success("✅ Embeddings generated!")
     else:
+        st.warning("📎 Please upload a file first.")
+
+# Once embeddings exist, allow user to ask questions
+if os.path.exists("embeddings/faiss_index/index.faiss"):
+    query = st.text_input("🔍 Ask a question:")
+    if st.button("🔎 Search") and query:
         query_embedding = embed_query(query)
-        results = retrieve_relevant_chunks(query_embedding, k=3)
-
-        context = ""
-        for res in results:
-            if res.get("image_path"):
-                st.image(res["image_path"], width=200)
-            st.markdown(f"**Text:** {res['text'][:500]}")
+        try:
+            results = retrieve_relevant_chunks(query_embedding, k=3)
+            context = "\n".join(r["text"] for r in results)
+            st.write("📚 Retrieved context:")
+            for r in results:
+                if r.get("image_path"):
+                    st.image(r["image_path"], width=200)
+                st.markdown(f"**Text:** {r['text'][:300]}")
             st.divider()
-            context += res["text"] + "\n"
 
-        st.subheader("🧠 Answer")
-        answer = generate_answer(query, context, model=model_choice)
-        st.success(answer)
-if st.button("🗑 Reset All Embeddings"):
-    try:
-        index_path = "embeddings/faiss_index/index.faiss"
-        meta_path = "embeddings/faiss_index/meta.pkl"
-        
-        if os.path.exists(index_path):
-            os.remove(index_path)
-        if os.path.exists(meta_path):
-            os.remove(meta_path)
-        st.success("✅ Index and metadata deleted successfully.")
-    except Exception as e:
-        st.error(f"❌ Failed to delete index: {e}")
+            answer = generate_answer(query, context)
+            st.success(answer)
+        except ValueError as e:
+            st.error(str(e))
+else:
+    st.info("📂 No FAISS index found. Please upload files and generate embeddings first.")

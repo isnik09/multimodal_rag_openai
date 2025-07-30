@@ -9,3 +9,5 @@ regex
 tqdm
 open-clip-torch
 python-dotenv
+python-docx
+pymupdf

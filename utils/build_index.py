@@ -6,46 +6,64 @@ from PIL import Image
 from sentence_transformers import SentenceTransformer
 import torch
 import open_clip
-from torchvision import transforms
+import fitz  # PyMuPDF
+import docx
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Paths
 TEXT_DIR = "data/docs"
 IMAGE_DIR = "data/images"
 INDEX_DIR = "embeddings/faiss_index"
 os.makedirs(INDEX_DIR, exist_ok=True)
 
-# Load models
 text_model = SentenceTransformer("all-MiniLM-L6-v2")
 clip_model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_s34b_b79k")
 clip_model.to(device)
 
-# Embedding storage
 index_vectors = []
 metadata = []
+
+def read_docx(path):
+    doc = docx.Document(path)
+    return "\n".join([para.text for para in doc.paragraphs])
+
+def read_pdf(path):
+    doc = fitz.open(path)
+    return "\n".join([page.get_text() for page in doc])
+
+def read_file(path):
+    if path.endswith(".txt"):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    elif path.endswith(".docx"):
+        return read_docx(path)
+    elif path.endswith(".pdf"):
+        return read_pdf(path)
+    return None
 
 print("🔍 Reading and embedding documents...")
 
 for filename in os.listdir(TEXT_DIR):
-    if not filename.endswith(".txt"):
+    full_path = os.path.join(TEXT_DIR, filename)
+    text = read_file(full_path)
+
+    if not text:
+        print(f"⚠️ Skipping {filename} (unsupported or unreadable)")
         continue
-    path = os.path.join(TEXT_DIR, filename)
 
-    with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    # Check for image with matching name
     basename = os.path.splitext(filename)[0]
-    image_path = os.path.join(IMAGE_DIR, f"{basename}.jpg")
-    if not os.path.exists(image_path):
-        image_path = os.path.join(IMAGE_DIR, f"{basename}.png")
+    image_path = None
+    for ext in [".jpg", ".png", ".jpeg"]:
+        candidate = os.path.join(IMAGE_DIR, f"{basename}{ext}")
+        if os.path.exists(candidate):
+            image_path = candidate
+            break
 
     # Embed text
     text_embedding = text_model.encode(text)
 
-    # Embed image if it exists
-    if os.path.exists(image_path):
+    # Embed image if exists
+    if image_path:
         image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
         with torch.no_grad():
             image_embedding = clip_model.encode_image(image).cpu().numpy()[0]
@@ -55,8 +73,8 @@ for filename in os.listdir(TEXT_DIR):
 
     index_vectors.append(combined)
     metadata.append({
-        "text": text,
-        "image_path": image_path if os.path.exists(image_path) else None
+        "text": text[:1000],  # clip for performance
+        "image_path": image_path
     })
 
 # Save FAISS index
@@ -66,7 +84,6 @@ index = faiss.IndexFlatL2(dim)
 index.add(np.array(index_vectors).astype("float32"))
 faiss.write_index(index, os.path.join(INDEX_DIR, "index.faiss"))
 
-# Save metadata
 with open(os.path.join(INDEX_DIR, "meta.pkl"), "wb") as f:
     pickle.dump(metadata, f)
 

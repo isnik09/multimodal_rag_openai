@@ -1,0 +1,10 @@
+streamlit
+openai
+faiss-cpu
+sentence-transformers
+torch
+Pillow
+ftfy
+regex
+tqdm
+clip-by-openai

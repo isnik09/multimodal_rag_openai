@@ -62,3 +62,15 @@ if st.button("🧠 Search & Answer"):
         st.subheader("🧠 Answer")
         answer = generate_answer(query, context, model=model_choice)
         st.success(answer)
+if st.button("🗑 Reset All Embeddings"):
+    try:
+        index_path = "embeddings/faiss_index/index.faiss"
+        meta_path = "embeddings/faiss_index/meta.pkl"
+        
+        if os.path.exists(index_path):
+            os.remove(index_path)
+        if os.path.exists(meta_path):
+            os.remove(meta_path)
+        st.success("✅ Index and metadata deleted successfully.")
+    except Exception as e:
+        st.error(f"❌ Failed to delete index: {e}")

@@ -1,11 +1,8 @@
-# utils/retriever.py
-
 import faiss
 import os
 import pickle
 import numpy as np
-
-# Load metadata and FAISS index
+ 
 with open("embeddings/faiss_index/meta.pkl", "rb") as f:
     metadata = pickle.load(f)
 

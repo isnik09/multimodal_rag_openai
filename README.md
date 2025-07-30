@@ -1,0 +1,4 @@
+# MULTIMODAL RAG IMPLIMENTATION with OPENAI as LLM
+
+### Requirements 
+- 

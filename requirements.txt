@@ -7,4 +7,5 @@ Pillow
 ftfy
 regex
 tqdm
-clip-by-openai
+open-clip-torch
+python-dotenv
